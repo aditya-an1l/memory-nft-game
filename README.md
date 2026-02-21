@@ -35,18 +35,6 @@ A 12-card memory matching game built on the **Ethereum Sepolia testnet** and dep
 
 ## 🎮 How to Play
 
-## TOC
-
-- [Memory NFT Game](#memory-nft-game)
-  - [Features](#features)
-  - [🛠 Tech Stack](#-tech-stack)
-  - [🎮 How to Play](#-how-to-play)
-  - [TOC](#toc)
-  - [📜 Smart Contract](#-smart-contract)
-    - [Token IDs](#token-ids)
-  - [🔭 Roadmap / Next Steps](#-roadmap--next-steps)
-  - [📄 License](#-license)
-
 **Off-chain mode (no wallet needed):**
 
 1. Open the game and click **New Game**
