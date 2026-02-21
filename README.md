@@ -1,6 +1,7 @@
 # Memory NFT Game
 
-> [!NOTE] UNDER ACTIVE DEVELOPMENT
+> [!NOTE]
+> **UNDER ACTIVE DEVELOPMENT**
 > Integration with Telegram is in progress
 
 A 12-card memory matching game built on the **Ethereum Sepolia testnet** and deployable as a **Telegram Mini App**. Match shape pairs to mint real ERC-1155 NFTs to your wallet and earn `$MEMORY` tokens — all on-chain, tamper-proof, and completely free to play using testnet ETH.
