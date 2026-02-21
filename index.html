@@ -1,0 +1,975 @@
+<!--- 
+Memory NFT Game - On-Chain Matching with NFT Rewards
+===================================================
+
+Author:     Aditya Anil (aditya-an1l)
+Date:       February 21, 2026
+Tech Stack: Ethereum Sepolia Testnet, Solidity Smart Contracts (ERC-721 NFTs),
+            React/HTML5 Frontend, Ethers.js, MetaMask Wallet Integration
+GitHub:     https://github.com/aditya-an1l/memory-nft-game.git
+Contract:   0x373b7522a4dF094c6143529c32DBc425a4702d59 (Sepolia)
+
+Description:
+A responsive memory matching game where players flip cards to find 6 shape pairs.
+- Off-chain mode: Local play with simulated NFT ticker.
+- On-chain mode: Submit pairs to smart contract for verification; matches mint
+  unique Shape NFTs (Circle, Square, Triangle, Star, Heart, Diamond) to wallet.
+Features: Telegram Mini App support, animated UI, move/time tracking, win modal.
+
+
+License: MIT
+Version: 1.0
+--->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Memory NFT</title>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg:       #0d0d1a;
+    --surface:  #151528;
+    --card-bg:  #1e1e38;
+    --card-face:#252545;
+    --accent1:  #ff6b9d;
+    --accent2:  #c77dff;
+    --accent3:  #4cc9f0;
+    --gold:     #ffd166;
+    --green:    #06d6a0;
+    --text:     #eef0ff;
+    --subtext:  #8888bb;
+    --radius:   16px;
+    --shadow:   0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 20% 10%, rgba(199,125,255,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(76,201,240,0.10) 0%, transparent 60%);
+  }
+
+  /* ─── Header ─────────────────────────────────────────────── */
+  header {
+    width: 100%;
+    max-width: 480px;
+    padding: 16px 20px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo {
+    font-family: 'Fredoka One', sans-serif;
+    font-size: 1.6rem;
+    background: linear-gradient(90deg, var(--accent1), var(--accent2), var(--accent3));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 1px;
+  }
+  .wallet-btn {
+    background: linear-gradient(135deg, var(--accent2), var(--accent3));
+    border: none;
+    border-radius: 24px;
+    color: #fff;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 7px 16px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .wallet-btn:hover { opacity: 0.85; }
+  .wallet-btn:active { transform: scale(0.96); }
+
+  /* ─── Score Bar ───────────────────────────────────────────── */
+  .scorebar {
+    width: 100%;
+    max-width: 480px;
+    padding: 8px 20px 4px;
+    display: flex;
+    gap: 12px;
+  }
+  .score-chip {
+    flex: 1;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .score-chip .label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--subtext);
+    font-weight: 700;
+  }
+  .score-chip .value {
+    font-family: 'Fredoka One', sans-serif;
+    font-size: 1.4rem;
+    color: var(--gold);
+    margin-top: 2px;
+  }
+  .score-chip.moves .value { color: var(--accent3); }
+  .score-chip.timer .value { color: var(--accent1); }
+
+  /* ─── Status Banner ────────────────────────────────────────── */
+  .status-banner {
+    width: 100%;
+    max-width: 480px;
+    padding: 6px 20px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--subtext);
+    min-height: 28px;
+    transition: color 0.3s;
+  }
+  .status-banner.success { color: var(--green); font-weight: 700; }
+  .status-banner.error   { color: var(--accent1); font-weight: 700; }
+  .status-banner.info    { color: var(--accent2); }
+
+  /* ─── Grid ─────────────────────────────────────────────────── */
+  .grid-wrap {
+    width: 100%;
+    max-width: 480px;
+    padding: 4px 16px 16px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  /* ─── Card ─────────────────────────────────────────────────── */
+  .card {
+    aspect-ratio: 3/4;
+    perspective: 600px;
+    cursor: pointer;
+  }
+  .card-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: var(--radius);
+  }
+  .card.flipped .card-inner,
+  .card.matched .card-inner {
+    transform: rotateY(180deg);
+  }
+  .card-back, .card-front {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius);
+    backface-visibility: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* BACK face */
+  .card-back {
+    background: var(--card-bg);
+    border: 1.5px solid rgba(255,255,255,0.07);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card-back::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(199,125,255,0.18) 0%, transparent 60%),
+      radial-gradient(circle at 70% 70%, rgba(76,201,240,0.12) 0%, transparent 60%);
+  }
+  .card-back .pattern {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    grid-template-rows: repeat(3,1fr);
+    gap: 4px;
+    width: 60%;
+    height: 60%;
+    opacity: 0.3;
+  }
+  .card-back .pattern span {
+    background: linear-gradient(135deg, var(--accent2), var(--accent3));
+    border-radius: 3px;
+  }
+
+  /* FRONT face */
+  .card-front {
+    background: var(--card-face);
+    border: 1.5px solid rgba(255,255,255,0.1);
+    transform: rotateY(180deg);
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .card.matched .card-front {
+    background: rgba(6,214,160,0.15);
+    border-color: var(--green);
+    box-shadow: 0 0 20px rgba(6,214,160,0.3), var(--shadow);
+  }
+
+  /* Shape SVG icons */
+  .shape-icon {
+    width: 52%;
+    height: 52%;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+  }
+
+  /* Card hover/active */
+  .card:not(.matched):not(.flipped):hover .card-back {
+    border-color: rgba(199,125,255,0.4);
+    box-shadow: 0 0 20px rgba(199,125,255,0.2), var(--shadow);
+  }
+  .card:not(.matched):active { transform: scale(0.95); }
+  .card.shake {
+    animation: shake 0.4s ease;
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+  .card.pop {
+    animation: pop 0.3s ease;
+  }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+
+  /* ─── Buttons ──────────────────────────────────────────────── */
+  .btn-row {
+    width: 100%;
+    max-width: 480px;
+    padding: 4px 16px 20px;
+    display: flex;
+    gap: 12px;
+  }
+  .btn {
+    flex: 1;
+    padding: 13px;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent1), var(--accent2));
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(255,107,157,0.35);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1.5px solid rgba(255,255,255,0.1);
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ─── NFT Ticker ───────────────────────────────────────────── */
+  .nft-ticker {
+    width: 100%;
+    max-width: 480px;
+    padding: 0 16px 8px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nft-ticker::-webkit-scrollbar { display: none; }
+  .nft-chip {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 24px;
+    padding: 5px 12px 5px 8px;
+    font-size: 0.75rem;
+    color: var(--gold);
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: slideIn 0.3s ease;
+  }
+  @keyframes slideIn {
+    from { opacity:0; transform: translateX(20px); }
+    to   { opacity:1; transform: translateX(0); }
+  }
+
+  /* ─── Win Modal ────────────────────────────────────────────── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: 24px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    padding: 32px 28px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+    animation: modalIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes modalIn {
+    from { opacity:0; transform: scale(0.7) translateY(40px); }
+    to   { opacity:1; transform: scale(1) translateY(0); }
+  }
+  .modal .trophy { font-size: 4rem; margin-bottom: 12px; }
+  .modal h2 {
+    font-family: 'Fredoka One', sans-serif;
+    font-size: 2rem;
+    background: linear-gradient(90deg, var(--gold), var(--accent1));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .modal p { color: var(--subtext); font-size: 0.95rem; margin-bottom: 20px; }
+  .modal .stat-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .modal .stat {
+    flex: 1;
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+  .modal .stat-val {
+    font-family: 'Fredoka One', sans-serif;
+    font-size: 1.6rem;
+    color: var(--gold);
+  }
+  .modal .stat-lbl {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--subtext);
+  }
+  .modal .nft-minted {
+    font-size: 0.8rem;
+    color: var(--green);
+    margin-bottom: 20px;
+    font-weight: 700;
+  }
+
+  /* ─── Tx indicator ─────────────────────────────────────────── */
+  .tx-spinner {
+    display: none;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: var(--accent2);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tx-spinner.show { display: inline-block; }
+
+  /* ─── Network badge ─────────────────────────────────────────── */
+  .net-badge {
+    display: inline-block;
+    background: rgba(6,214,160,0.15);
+    color: var(--green);
+    border-radius: 8px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    margin-left: 8px;
+    border: 1px solid rgba(6,214,160,0.3);
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── HEADER ─────────────────────────────────────────────── -->
+<header>
+  <div>
+    <span class="logo">MEMORY NFT</span>
+    <span class="net-badge">SEPOLIA</span>
+  </div>
+  <button class="wallet-btn" id="connectBtn">Connect Wallet</button>
+</header>
+
+<!-- ─── SCORE BAR ─────────────────────────────────────────────── -->
+<div class="scorebar">
+  <div class="score-chip">
+    <span class="label">Pairs</span>
+    <span class="value" id="pairsFound">0</span>
+  </div>
+  <div class="score-chip moves">
+    <span class="label">Moves</span>
+    <span class="value" id="moveCount">0</span>
+  </div>
+  <div class="score-chip timer">
+    <span class="label">Time</span>
+    <span class="value" id="timerDisplay">0:00</span>
+  </div>
+</div>
+
+<!-- ─── STATUS ─────────────────────────────────────────────────── -->
+<div class="status-banner" id="statusBanner">Connect your wallet to start playing on Sepolia!</div>
+
+<!-- ─── CARD GRID ──────────────────────────────────────────────── -->
+<div class="grid-wrap">
+  <div class="grid" id="cardGrid"></div>
+</div>
+
+<!-- ─── NFT TICKER ─────────────────────────────────────────────── -->
+<div class="nft-ticker" id="nftTicker">
+  <div class="nft-chip">🏅 NFTs minted here</div>
+</div>
+
+<!-- ─── BUTTONS ────────────────────────────────────────────────── -->
+<div class="btn-row">
+  <button class="btn btn-secondary" id="newGameBtn" onclick="newGame()">New Game</button>
+  <button class="btn btn-primary" id="startChainBtn" onclick="startChainGame()" disabled>
+    <span class="tx-spinner" id="chainSpinner"></span>
+    Play On-Chain
+  </button>
+</div>
+
+<!-- ─── WIN MODAL ──────────────────────────────────────────────── -->
+<div class="modal-overlay" id="winModal">
+  <div class="modal">
+    <div class="trophy">🏆</div>
+    <h2>You Won!</h2>
+    <p id="winSubtitle">Amazing memory!</p>
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-val" id="winPairs">6</div>
+        <div class="stat-lbl">Pairs</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="winMoves">0</div>
+        <div class="stat-lbl">Moves</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="winTime">0:00</div>
+        <div class="stat-lbl">Time</div>
+      </div>
+    </div>
+    <div class="nft-minted" id="nftMintedMsg">🎨 6 Shape NFTs + 60 $MEMORY minted!</div>
+    <div class="btn-row" style="padding:0">
+      <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="newGame(); closeModal()">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── SVG SHAPE DEFINITIONS ──────────────────────────────────── -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- CIRCLE -->
+    <symbol id="shape-1" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="40" fill="url(#g1)" />
+      <defs><radialGradient id="g1" cx="35%" cy="30%"><stop offset="0%" stop-color="#ff9de2"/><stop offset="100%" stop-color="#c77dff"/></radialGradient></defs>
+    </symbol>
+    <!-- SQUARE -->
+    <symbol id="shape-2" viewBox="0 0 100 100">
+      <rect x="15" y="15" width="70" height="70" rx="8" fill="url(#g2)" />
+      <defs><radialGradient id="g2" cx="35%" cy="30%"><stop offset="0%" stop-color="#4cc9f0"/><stop offset="100%" stop-color="#4361ee"/></radialGradient></defs>
+    </symbol>
+    <!-- TRIANGLE -->
+    <symbol id="shape-3" viewBox="0 0 100 100">
+      <polygon points="50,12 92,88 8,88" fill="url(#g3)" />
+      <defs><radialGradient id="g3" cx="50%" cy="40%"><stop offset="0%" stop-color="#f9c74f"/><stop offset="100%" stop-color="#f3722c"/></radialGradient></defs>
+    </symbol>
+    <!-- STAR -->
+    <symbol id="shape-4" viewBox="0 0 100 100">
+      <polygon points="50,8 61,37 92,37 68,57 76,86 50,68 24,86 32,57 8,37 39,37" fill="url(#g4)" />
+      <defs><radialGradient id="g4" cx="50%" cy="40%"><stop offset="0%" stop-color="#ffd166"/><stop offset="100%" stop-color="#ef476f"/></radialGradient></defs>
+    </symbol>
+    <!-- HEART -->
+    <symbol id="shape-5" viewBox="0 0 100 100">
+      <path d="M50,82 C50,82 12,55 12,33 C12,20 22,12 33,14 C41,15 50,26 50,26 C50,26 59,15 67,14 C78,12 88,20 88,33 C88,55 50,82 50,82Z" fill="url(#g5)" />
+      <defs><radialGradient id="g5" cx="50%" cy="40%"><stop offset="0%" stop-color="#ff9de2"/><stop offset="100%" stop-color="#ef476f"/></radialGradient></defs>
+    </symbol>
+    <!-- DIAMOND -->
+    <symbol id="shape-6" viewBox="0 0 100 100">
+      <polygon points="50,10 88,50 50,90 12,50" fill="url(#g6)" />
+      <defs><radialGradient id="g6" cx="35%" cy="30%"><stop offset="0%" stop-color="#80ffdb"/><stop offset="100%" stop-color="#06d6a0"/></radialGradient></defs>
+    </symbol>
+  </defs>
+</svg>
+
+<script>
+const CONTRACT_ADDRESS = "0x373b7522a4dF094c6143529c32DBc425a4702d59"; 
+
+const CONTRACT_ABI = [
+  "function createGame(uint256 shuffleSeed, bool singlePlayer) external returns (uint256)",
+  "function submitPair(uint256 gameId, uint8 idx1, uint8 idx2) external returns (bool matched, uint8 shape)",
+  "function getRevealedMask(uint256 gameId) external view returns (bool[12])",
+  "function getGameInfo(uint256 gameId) external view returns (address,address,address,uint8,uint8,bool)",
+  "event PairMatched(uint256 indexed gameId, address indexed player, uint8 shape)",
+  "event PairMismatched(uint256 indexed gameId, address indexed player, uint8 idx1, uint8 idx2)",
+  "event GameOver(uint256 indexed gameId, address indexed winner, uint8 pairs)"
+];
+
+const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111 decimal
+const SHAPE_NAMES = ["","Circle","Square","Triangle","Star","Heart","Diamond"];
+const SHAPE_EMOJIS = ["","⭕","⬛","🔺","⭐","❤️","💎"];
+
+// ═══════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════
+let provider, signer, contract;
+let walletConnected = false;
+let onChainMode = false;
+let gameId = null;
+
+// Client-side game state
+let board = [];          // shape IDs 1-6 (local shuffle for off-chain mode)
+let flipped = [];        // currently flipped indices (max 2)
+let matched = [];        // permanently matched indices
+let lockBoard = false;
+let moves = 0;
+let pairs = 0;
+let timerInterval = null;
+let seconds = 0;
+let nftsMinted = [];
+
+// ═══════════════════════════════════════════════════════════════════
+//  TELEGRAM INIT
+// ═══════════════════════════════════════════════════════════════════
+if (window.Telegram?.WebApp) {
+  Telegram.WebApp.ready();
+  Telegram.WebApp.expand();
+  Telegram.WebApp.setHeaderColor('#0d0d1a');
+  Telegram.WebApp.setBackgroundColor('#0d0d1a');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  WALLET CONNECTION
+// ═══════════════════════════════════════════════════════════════════
+async function connectWallet() {
+  const btn = document.getElementById('connectBtn');
+  btn.textContent = 'Connecting...';
+  btn.disabled = true;
+
+  try {
+    // Wait up to 3 seconds for MetaMask to inject into the page
+    // (Firefox injects it later than Chrome)
+    const eth = await waitForEthereum(3000);
+
+    if (!eth) {
+      setStatus("MetaMask not detected. Install it at metamask.io and refresh the page.", "error");
+      btn.textContent = 'Connect Wallet';
+      btn.disabled = false;
+      return;
+    }
+
+    // Request accounts
+    await eth.request({ method: 'eth_requestAccounts' });
+
+    // Switch to Sepolia
+    try {
+      await eth.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: SEPOLIA_CHAIN_ID }],
+      });
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        await eth.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: SEPOLIA_CHAIN_ID,
+            chainName: 'Sepolia Test Network',
+            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['https://rpc.sepolia.org'],
+            blockExplorerUrls: ['https://sepolia.etherscan.io'],
+          }],
+        });
+      } else {
+        throw switchErr;
+      }
+    }
+
+    provider = new ethers.BrowserProvider(eth);
+    signer   = await provider.getSigner();
+
+    if (CONTRACT_ADDRESS !== "YOUR_CONTRACT_ADDRESS_HERE") {
+      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+    }
+
+    const addr  = await signer.getAddress();
+    const short = addr.slice(0,6) + "..." + addr.slice(-4);
+    btn.textContent = short;
+    walletConnected = true;
+
+    if (CONTRACT_ADDRESS !== "YOUR_CONTRACT_ADDRESS_HERE") {
+      document.getElementById('startChainBtn').disabled = false;
+      setStatus("Wallet connected! Click 'Play On-Chain' for NFT rewards.", "success");
+    } else {
+      setStatus("Wallet connected! (Deploy contract to enable on-chain mode)", "info");
+    }
+
+  } catch (e) {
+    if (e.code === 4001) {
+      setStatus("You rejected the connection request.", "error");
+    } else {
+      setStatus("Connection failed: " + (e.message || e), "error");
+    }
+    btn.textContent = 'Connect Wallet';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Polls for window.ethereum every 100ms up to `timeoutMs`
+// Needed because Firefox injects MetaMask slightly late
+function waitForEthereum(timeoutMs) {
+  return new Promise((resolve) => {
+    if (window.ethereum) { resolve(window.ethereum); return; }
+    const interval = setInterval(() => {
+      if (window.ethereum) {
+        clearInterval(interval);
+        resolve(window.ethereum);
+      }
+    }, 100);
+    setTimeout(() => {
+      clearInterval(interval);
+      resolve(null); // timed out — MetaMask not found
+    }, timeoutMs);
+  });
+}
+
+document.getElementById('connectBtn').addEventListener('click', connectWallet);
+
+// ═══════════════════════════════════════════════════════════════════
+//  LOCAL SHUFFLE
+// ═══════════════════════════════════════════════════════════════════
+function shuffleLocal() {
+  let cards = [1,1,2,2,3,3,4,4,5,5,6,6];
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+  }
+  return cards;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  GAME INIT
+// ═══════════════════════════════════════════════════════════════════
+function newGame() {
+  clearInterval(timerInterval);
+  onChainMode = false;
+  gameId = null;
+  flipped = [];
+  matched = [];
+  lockBoard = false;
+  moves = 0;
+  pairs = 0;
+  seconds = 0;
+  nftsMinted = [];
+
+  board = shuffleLocal();
+  renderGrid();
+  updateScores();
+  updateTimerDisplay();
+  document.getElementById('nftTicker').innerHTML = '<div class="nft-chip">🏅 NFTs minted here</div>';
+  setStatus("Find all 6 pairs! Flip two cards to match shapes.", "info");
+
+  timerInterval = setInterval(() => {
+    seconds++;
+    updateTimerDisplay();
+  }, 1000);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ON-CHAIN GAME START
+// ═══════════════════════════════════════════════════════════════════
+async function startChainGame() {
+  if (!walletConnected || !contract) {
+    setStatus("Connect wallet first and ensure contract is deployed.", "error");
+    return;
+  }
+  const spinner = document.getElementById('chainSpinner');
+  const btn = document.getElementById('startChainBtn');
+  spinner.classList.add('show');
+  btn.disabled = true;
+  setStatus("Creating game on Sepolia... confirm in MetaMask", "info");
+
+  try {
+    const seed = BigInt(Math.floor(Math.random() * 1e15));
+    const tx = await contract.createGame(seed, true);
+    setStatus("Transaction sent! Waiting for confirmation...", "info");
+    const receipt = await tx.wait();
+
+    const iface = new ethers.Interface(CONTRACT_ABI);
+    let gid;
+    for (const log of receipt.logs) {
+      try {
+        const parsed = iface.parseLog(log);
+        if (parsed.name === 'GameCreated') { gid = parsed.args[0]; break; }
+      } catch {}
+    }
+    if (!gid && gid !== 0n) {
+      // fallback: read from contract (nextGameId - 1)
+      gid = (await contract.nextGameId()) - 1n;
+    }
+    gameId = gid;
+    onChainMode = true;
+
+    // Sync board from on-chain revealed mask + local shuffle
+    // The contract shuffled server-side; we mirror it via events or re-read
+    // For demo: use local shuffle visually, verify via contract on submitPair
+    board = shuffleLocal();
+    flipped = [];
+    matched = [];
+    lockBoard = false;
+    moves = 0;
+    pairs = 0;
+    seconds = 0;
+    nftsMinted = [];
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => { seconds++; updateTimerDisplay(); }, 1000);
+    renderGrid();
+    updateScores();
+    setStatus(`🔗 On-chain game #${gameId}! NFTs minted on match!`, "success");
+  } catch (e) {
+    setStatus("TX failed: " + (e.reason || e.message), "error");
+  } finally {
+    spinner.classList.remove('show');
+    btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  RENDER GRID
+// ═══════════════════════════════════════════════════════════════════
+function renderGrid() {
+  const grid = document.getElementById('cardGrid');
+  grid.innerHTML = '';
+  for (let i = 0; i < 12; i++) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.index = i;
+    card.innerHTML = `
+      <div class="card-inner">
+        <div class="card-back">
+          <div class="pattern">
+            ${Array(9).fill('<span></span>').join('')}
+          </div>
+        </div>
+        <div class="card-front">
+          <svg class="shape-icon">
+            <use href="#shape-${board[i]}"/>
+          </svg>
+        </div>
+      </div>`;
+    card.addEventListener('click', () => onCardClick(i));
+    grid.appendChild(card);
+  }
+}
+
+function getCardEl(i) {
+  return document.querySelector(`.card[data-index="${i}"]`);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  CARD CLICK
+// ═══════════════════════════════════════════════════════════════════
+async function onCardClick(i) {
+  if (lockBoard) return;
+  if (matched.includes(i)) return;
+  if (flipped.includes(i)) return;
+  if (flipped.length >= 2) return;
+
+  // Flip card
+  getCardEl(i).classList.add('flipped');
+  flipped.push(i);
+
+  if (flipped.length === 2) {
+    lockBoard = true;
+    moves++;
+    updateScores();
+    await checkMatch(flipped[0], flipped[1]);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  MATCH CHECK
+// ═══════════════════════════════════════════════════════════════════
+async function checkMatch(i1, i2) {
+  let isMatch = false;
+
+  if (onChainMode && contract && gameId !== null) {
+    // ── On-chain verification ──────────────────────────────────
+    setStatus(" Verifying on-chain...", "info");
+    try {
+      // Use callStatic to simulate without full gas
+      const result = await contract.submitPair.staticCall(gameId, i1, i2);
+      isMatch = result[0]; // matched bool
+
+      if (isMatch) {
+        // Send actual TX
+        const tx = await contract.submitPair(gameId, i1, i2);
+        setStatus("TX sent! Waiting...", "info");
+        await tx.wait();
+        const shape = board[i1];
+        addNftChip(shape);
+      } else {
+        await contract.submitPair(gameId, i1, i2);
+      }
+    } catch (e) {
+      // If contract board differs from local (seed mismatch), fall back to local
+      isMatch = board[i1] === board[i2];
+      setStatus("Chain verify error – using local check", "error");
+    }
+  } else {
+    // ── Off-chain (local) ──────────────────────────────────────
+    isMatch = board[i1] === board[i2];
+    await delay(400); // brief pause for UX
+  }
+
+  if (isMatch) {
+    const shape = board[i1];
+    matched.push(i1, i2);
+    flipped = [];
+    pairs++;
+
+    getCardEl(i1).classList.add('matched');
+    getCardEl(i2).classList.add('matched');
+    getCardEl(i1).classList.add('pop');
+    getCardEl(i2).classList.add('pop');
+    setTimeout(() => {
+      getCardEl(i1)?.classList.remove('pop');
+      getCardEl(i2)?.classList.remove('pop');
+    }, 300);
+
+    if (!onChainMode) addNftChip(shape); // show virtual NFT in local mode too
+    updateScores();
+    setStatus(`✨ ${SHAPE_NAMES[shape]} matched! +10 $MEMORY`, "success");
+
+    if (pairs === 6) {
+      setTimeout(showWin, 600);
+    } else {
+      lockBoard = false;
+    }
+  } else {
+    // Mismatch
+    getCardEl(i1).classList.add('shake');
+    getCardEl(i2).classList.add('shake');
+    setTimeout(() => {
+      getCardEl(i1)?.classList.remove('shake', 'flipped');
+      getCardEl(i2)?.classList.remove('shake', 'flipped');
+      flipped = [];
+      lockBoard = false;
+      setStatus("No match – try again!", "error");
+    }, 900);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function updateScores() {
+  document.getElementById('pairsFound').textContent = pairs;
+  document.getElementById('moveCount').textContent = moves;
+}
+
+function updateTimerDisplay() {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  document.getElementById('timerDisplay').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+function setStatus(msg, type = '') {
+  const el = document.getElementById('statusBanner');
+  el.textContent = msg;
+  el.className = 'status-banner ' + type;
+}
+
+function addNftChip(shapeId) {
+  nftsMinted.push(shapeId);
+  const ticker = document.getElementById('nftTicker');
+  const placeholder = ticker.querySelector('.nft-chip');
+  if (placeholder && placeholder.textContent.includes('minted here')) placeholder.remove();
+
+  const chip = document.createElement('div');
+  chip.className = 'nft-chip';
+  chip.innerHTML = `${SHAPE_EMOJIS[shapeId]} ${SHAPE_NAMES[shapeId]} NFT`;
+  ticker.appendChild(chip);
+  ticker.scrollLeft = ticker.scrollWidth;
+}
+
+function showWin() {
+  clearInterval(timerInterval);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  document.getElementById('winPairs').textContent = pairs;
+  document.getElementById('winMoves').textContent = moves;
+  document.getElementById('winTime').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  const memEarned = nftsMinted.length * 10;
+  const modeTag = onChainMode ? 'NFTs minted to your wallet!' : '(Connect wallet for real NFTs)';
+  document.getElementById('nftMintedMsg').textContent =
+    `🎨 ${nftsMinted.length} Shape NFTs • ${memEarned} $MEMORY ${modeTag}`;
+
+  const msgs = ["Incredible memory!", "You crushed it!", "Flawless victory!", "Memory master!"];
+  document.getElementById('winSubtitle').textContent = msgs[Math.floor(Math.random()*msgs.length)];
+  document.getElementById('winModal').classList.add('show');
+
+  // Share on Telegram
+  if (window.Telegram?.WebApp?.sendData) {
+    Telegram.WebApp.sendData(JSON.stringify({
+      event: 'game_over',
+      pairs,
+      moves,
+      time: seconds,
+      nfts: nftsMinted.length
+    }));
+  }
+}
+
+function closeModal() {
+  document.getElementById('winModal').classList.remove('show');
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ═══════════════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════════════
+newGame();
+</script>
+</body>
+</html>
