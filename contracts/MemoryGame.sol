@@ -138,6 +138,22 @@ contract MemoryGame is ERC1155, Ownable {
 
     // ── View Helpers ───────────────────────────────────────────────────────────
 
+    /**
+     * Returns the full shuffled board for a game.
+     * Only the game creator (player1) can read this — prevents cheating by
+     * opponents peeking at the board before flipping.
+     * In single-player mode anyone can call it (player1 == player2).
+     */
+    function getBoard(uint256 gameId)
+        external
+        view
+        returns (uint8[12] memory)
+    {
+        GameData storage gd = games[gameId];
+        require(msg.sender == gd.player1 || msg.sender == gd.player2, "Not your game");
+        return gd.board;
+    }
+
     function getRevealedMask(uint256 gameId)
         external
         view
