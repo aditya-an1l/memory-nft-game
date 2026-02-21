@@ -9,6 +9,9 @@ A 12-card memory matching game built on the **Ethereum Sepolia testnet** and dep
 
 ## Features
 
+<img width="873" height="799" alt="image" src="https://github.com/user-attachments/assets/1def6a97-680b-4590-8e51-dda92e5c146b" />
+
+
 - **12-card concentration game** — 6 shape pairs in a 4×3 grid
 - **On-chain match verification** — the smart contract validates every pair, not the frontend
 - **NFT minting** — each matched pair mints a Shape NFT (Circle, Square, Triangle, Star, Heart, Diamond) to the player's wallet
