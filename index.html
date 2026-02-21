@@ -32,6 +32,8 @@ Version: 1.0
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
 
+<script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
 
@@ -574,58 +576,61 @@ if (window.Telegram?.WebApp) {
 //  WALLET CONNECTION
 // ═══════════════════════════════════════════════════════════════════
 async function connectWallet() {
-  const btn = document.getElementById('connectBtn');
-  btn.textContent = 'Connecting...';
-  btn.disabled = true;
-
   try {
-    // Wait up to 3 seconds for MetaMask to inject into the page
-    // (Firefox injects it later than Chrome)
-    const eth = await waitForEthereum(3000);
+    let ethProvider;
 
-    if (!eth) {
-      setStatus("MetaMask not detected. Install it at metamask.io and refresh the page.", "error");
-      btn.textContent = 'Connect Wallet';
-      btn.disabled = false;
-      return;
+    // Try injected wallet first (MetaMask in desktop browser)
+    if (window.ethereum) {
+      ethProvider = window.ethereum;
+      await ethProvider.request({ method: 'eth_requestAccounts' });
+    } else {
+      // Fallback: WalletConnect (works inside Telegram)
+      const WalletConnectProvider = window.WalletConnectProvider.default;
+      const wcProvider = new WalletConnectProvider({
+        projectId: "4ddd4ea29055f91d4f90b23847b2f08d",
+        chains: [11155111], // Sepolia
+        rpcMap: {
+          11155111: "https://eth-sepolia.g.alchemy.com/v2/wGHJY_ND2x5hjTUgoEs7Z"
+        },
+        showQrModal: true,
+      });
+      await wcProvider.enable(); // shows QR code popup
+      ethProvider = wcProvider;
     }
 
-    // Request accounts
-    await eth.request({ method: 'eth_requestAccounts' });
-
-    // Switch to Sepolia
-    try {
-      await eth.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: SEPOLIA_CHAIN_ID }],
-      });
-    } catch (switchErr) {
-      if (switchErr.code === 4902) {
-        await eth.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: SEPOLIA_CHAIN_ID,
-            chainName: 'Sepolia Test Network',
-            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-            rpcUrls: ['https://rpc.sepolia.org'],
-            blockExplorerUrls: ['https://sepolia.etherscan.io'],
-          }],
+    // Switch to Sepolia if using injected wallet
+    if (window.ethereum) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: SEPOLIA_CHAIN_ID }],
         });
-      } else {
-        throw switchErr;
+      } catch (switchErr) {
+        if (switchErr.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: SEPOLIA_CHAIN_ID,
+              chainName: 'Sepolia Test Network',
+              nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://sepolia.infura.io/v3/'],
+              blockExplorerUrls: ['https://sepolia.etherscan.io'],
+            }],
+          });
+        }
       }
     }
 
-    provider = new ethers.BrowserProvider(eth);
+    provider = new ethers.BrowserProvider(ethProvider);
     signer   = await provider.getSigner();
 
     if (CONTRACT_ADDRESS !== "YOUR_CONTRACT_ADDRESS_HERE") {
       contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
     }
 
-    const addr  = await signer.getAddress();
+    const addr = await signer.getAddress();
     const short = addr.slice(0,6) + "..." + addr.slice(-4);
-    btn.textContent = short;
+    document.getElementById('connectBtn').textContent = short;
     walletConnected = true;
 
     if (CONTRACT_ADDRESS !== "YOUR_CONTRACT_ADDRESS_HERE") {
@@ -636,17 +641,9 @@ async function connectWallet() {
     }
 
   } catch (e) {
-    if (e.code === 4001) {
-      setStatus("You rejected the connection request.", "error");
-    } else {
-      setStatus("Connection failed: " + (e.message || e), "error");
-    }
-    btn.textContent = 'Connect Wallet';
-  } finally {
-    btn.disabled = false;
+    setStatus("Wallet connection failed: " + e.message, "error");
   }
 }
-
 // Polls for window.ethereum every 100ms up to `timeoutMs`
 // Needed because Firefox injects MetaMask slightly late
 function waitForEthereum(timeoutMs) {
