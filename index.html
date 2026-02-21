@@ -531,14 +531,15 @@ const CONTRACT_ADDRESS = "0x373b7522a4dF094c6143529c32DBc425a4702d59";
 
 const CONTRACT_ABI = [
   "function createGame(uint256 shuffleSeed, bool singlePlayer) external returns (uint256)",
-  "function submitPair(uint256 gameId, uint8 idx1, uint8 idx2) external returns (bool matched, uint8 shape)",
+  "function submitPair(uint256 gameId, uint8 idx1, uint8 idx2) external returns (bool isMatch, uint8 shape)",
   "function getRevealedMask(uint256 gameId) external view returns (bool[12])",
   "function getGameInfo(uint256 gameId) external view returns (address,address,address,uint8,uint8,bool)",
+  "function nextGameId() external view returns (uint256)",
+  "event GameCreated(uint256 indexed gameId, address indexed player1, bool singlePlayer)",
   "event PairMatched(uint256 indexed gameId, address indexed player, uint8 shape)",
-  "event PairMismatched(uint256 indexed gameId, address indexed player, uint8 idx1, uint8 idx2)",
-  "event GameOver(uint256 indexed gameId, address indexed winner, uint8 pairs)"
+  "event PairMismatched(uint256 indexed gameId, address indexed player, uint8 index1, uint8 index2)",
+  "event GameOver(uint256 indexed gameId, address indexed winner, uint8 totalPairs)"
 ];
-
 const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111 decimal
 const SHAPE_NAMES = ["","Circle","Square","Triangle","Star","Heart","Diamond"];
 const SHAPE_EMOJIS = ["","⭕","⬛","🔺","⭐","❤️","💎"];
@@ -724,24 +725,32 @@ async function startChainGame() {
     setStatus("Transaction sent! Waiting for confirmation...", "info");
     const receipt = await tx.wait();
 
-    const iface = new ethers.Interface(CONTRACT_ABI);
-    let gid;
+// Read gameId directly from the first topic of the GameCreated event log.
+    // Topic[0] = event signature hash, Topic[1] = first indexed param (gameId).
+    // This works regardless of ABI or ethers parsing issues.
+    const GAME_CREATED_TOPIC = ethers.id("GameCreated(uint256,address,bool)");
+    let gid = null;
+
     for (const log of receipt.logs) {
-      try {
-        const parsed = iface.parseLog(log);
-        if (parsed.name === 'GameCreated') { gid = parsed.args[0]; break; }
-      } catch {}
+      if (log.topics[0] === GAME_CREATED_TOPIC) {
+        // gameId is the first indexed param → topics[1], zero-padded to 32 bytes
+        gid = BigInt(log.topics[1]);
+        break;
+      }
     }
-    if (!gid && gid !== 0n) {
-      // fallback: read from contract (nextGameId - 1)
-      gid = (await contract.nextGameId()) - 1n;
+
+    // Last resort fallback using a direct eth_call (no ABI needed)
+    if (gid === null) {
+      const raw = await provider.call({
+        to: CONTRACT_ADDRESS,
+        data: "0x61da1439"  // keccak256("nextGameId()") first 4 bytes
+      });
+      gid = BigInt(raw) - 1n;
     }
+
     gameId = gid;
     onChainMode = true;
 
-    // Sync board from on-chain revealed mask + local shuffle
-    // The contract shuffled server-side; we mirror it via events or re-read
-    // For demo: use local shuffle visually, verify via contract on submitPair
     board = shuffleLocal();
     flipped = [];
     matched = [];
@@ -755,6 +764,7 @@ async function startChainGame() {
     renderGrid();
     updateScores();
     setStatus(`🔗 On-chain game #${gameId}! NFTs minted on match!`, "success");
+
   } catch (e) {
     setStatus("TX failed: " + (e.reason || e.message), "error");
   } finally {
