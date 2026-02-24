@@ -77,6 +77,21 @@ Version: 1.0
     padding:8px 16px;cursor:pointer;
     transition:opacity .15s;white-space:nowrap;
   }
+
+.freeplay-btn{
+    background:transparent;
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    color:var(--subtext);
+    font-family:'Inter',sans-serif;
+    font-weight:500;font-size:.75rem;
+    padding:7px 14px;cursor:pointer;
+    transition:border-color .15s,color .15s;
+    white-space:nowrap;
+    text-decoration:none;
+    display:inline-flex;align-items:center;gap:5px;
+  }
+  .freeplay-btn:hover{border-color:var(--accent);color:var(--accent)}
   .wallet-btn:hover{opacity:.85}
   .net-badge{
     display:inline-block;
@@ -412,7 +427,10 @@ Version: 1.0
 
 <header>
   <div><span class="logo">MEMORY NFT</span><span class="net-badge">SEPOLIA</span></div>
-  <button class="wallet-btn" id="connectBtn">Connect Wallet</button>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a class="freeplay-btn" href="memory-game-without-wallet.html" target="_blank">▶ Play Free</a>
+    <button class="wallet-btn" id="connectBtn">Connect Wallet</button>
+  </div>
 </header>
 
 <div class="tab-nav">

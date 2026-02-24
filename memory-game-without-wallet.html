@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<!--
+  Memory Game — Standalone Edition
+  Author:  Aditya Anil (aditya-an1l)
+  License: MIT
+  Version: 2.0 (no wallet / no blockchain)
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Memory Game</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --bg:       #0b0e11;
+    --surface:  #161a1e;
+    --card-bg:  #1e2329;
+    --border:   rgba(255,255,255,.07);
+    --accent:   #f0b90b;
+    --green:    #0ecb81;
+    --red:      #f6465d;
+    --text:     #eaecef;
+    --subtext:  #848e9c;
+    --radius:   6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── Header ── */
+  header {
+    width: 100%; max-width: 480px;
+    padding: 16px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-size: 1rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .best-badge {
+    font-size: .72rem; color: var(--subtext); font-weight: 500;
+  }
+  .best-badge span { color: var(--accent); font-weight: 700; }
+
+  /* ── Score bar ── */
+  .scorebar {
+    width: 100%; max-width: 480px;
+    padding: 14px 0 10px;
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .score-chip {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 10px 0;
+    border-right: 1px solid var(--border);
+  }
+  .score-chip:last-child { border-right: none; }
+  .score-chip .label {
+    font-size: .62rem; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--subtext); font-weight: 500;
+  }
+  .score-chip .value {
+    font-size: 1.25rem; font-weight: 700;
+    color: var(--text); margin-top: 3px;
+  }
+
+  /* ── Status ── */
+  .status-banner {
+    width: 100%; max-width: 480px;
+    padding: 8px 20px;
+    font-size: .78rem; color: var(--subtext);
+    min-height: 30px; text-align: center;
+    transition: color .2s;
+  }
+  .status-banner.success { color: var(--green); }
+  .status-banner.error   { color: var(--red); }
+  .status-banner.info    { color: var(--accent); }
+
+  /* ── Card grid ── */
+  .grid-wrap { width: 100%; max-width: 480px; padding: 4px 16px 12px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .card { aspect-ratio: 3/4; perspective: 600px; cursor: pointer; }
+  .card-inner {
+    width: 100%; height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform .4s cubic-bezier(.4,0,.2,1);
+    border-radius: var(--radius);
+  }
+  .card.flipped .card-inner,
+  .card.matched .card-inner { transform: rotateY(180deg); }
+
+  .card-back, .card-front {
+    position: absolute; inset: 0;
+    border-radius: var(--radius);
+    backface-visibility: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card-back {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+  }
+  .card-back .pattern {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    grid-template-rows: repeat(3,1fr);
+    gap: 3px; width: 55%; height: 55%; opacity: .15;
+  }
+  .card-back .pattern span {
+    background: var(--subtext); border-radius: 1px;
+  }
+  .card-front {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    transform: rotateY(180deg);
+  }
+  .card.matched .card-front {
+    border-color: var(--green);
+    background: rgba(14,203,129,.06);
+  }
+  .shape-icon {
+    width: 52%; height: 52%;
+    min-width: 24px; min-height: 24px;
+    display: block; overflow: visible;
+  }
+  .card:not(.matched):not(.flipped):hover .card-back {
+    border-color: rgba(240,185,11,.4);
+  }
+  .card:not(.matched):active { transform: scale(.97); }
+
+  .card.shake { animation: shake .35s ease; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-5px); }
+    40% { transform: translateX(5px); }
+    60% { transform: translateX(-3px); }
+    80% { transform: translateX(3px); }
+  }
+  .card.pop { animation: pop .25s ease; }
+  @keyframes pop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.06); }
+    100% { transform: scale(1); }
+  }
+
+  /* ── Buttons ── */
+  .btn-row {
+    width: 100%; max-width: 480px;
+    padding: 4px 16px 20px;
+    display: flex; gap: 8px;
+  }
+  .btn {
+    flex: 1; padding: 11px; border: none;
+    border-radius: var(--radius);
+    font-family: 'Inter', sans-serif;
+    font-weight: 600; font-size: .88rem;
+    cursor: pointer; transition: opacity .15s;
+  }
+  .btn:active { opacity: .8; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { opacity: .9; }
+  .btn-secondary {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: rgba(255,255,255,.2); }
+
+  /* ── Difficulty selector ── */
+  .difficulty-row {
+    width: 100%; max-width: 480px;
+    padding: 8px 16px 4px;
+    display: flex; gap: 6px; align-items: center;
+  }
+  .diff-label {
+    font-size: .65rem; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--subtext);
+    font-weight: 600; margin-right: 4px;
+  }
+  .diff-btn {
+    padding: 5px 12px; border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent; color: var(--subtext);
+    font-family: 'Inter', sans-serif; font-size: .75rem; font-weight: 500;
+    cursor: pointer; transition: all .15s;
+  }
+  .diff-btn.active {
+    background: rgba(240,185,11,.12);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── Win modal ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.75); backdrop-filter: blur(6px);
+    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 8px;
+    border: 1px solid var(--border);
+    padding: 28px 24px; width: 100%; max-width: 340px; text-align: center;
+    animation: modalIn .3s ease;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .modal .trophy { font-size: 2.8rem; margin-bottom: 10px; }
+  .modal h2 { font-size: 1.4rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .modal .subtitle { color: var(--subtext); font-size: .88rem; margin-bottom: 18px; }
+  .modal .stat-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .modal .stat {
+    flex: 1; background: var(--card-bg);
+    border-radius: var(--radius); padding: 12px;
+    border: 1px solid var(--border);
+  }
+  .modal .stat-val { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
+  .modal .stat-lbl {
+    font-size: .62rem; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--subtext); margin-top: 2px;
+  }
+  .modal .result-msg {
+    font-size: .78rem; color: var(--subtext);
+    margin: 12px 0 20px; line-height: 1.6;
+  }
+  .modal .result-msg strong { color: var(--green); }
+  .modal .btn-row { padding: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">Memory Game</span>
+  <span class="best-badge">Best: <span id="bestTime">—</span></span>
+</header>
+
+<div class="scorebar">
+  <div class="score-chip">
+    <span class="label">Pairs</span>
+    <span class="value" id="pairsFound">0/6</span>
+  </div>
+  <div class="score-chip">
+    <span class="label">Moves</span>
+    <span class="value" id="moveCount">0</span>
+  </div>
+  <div class="score-chip">
+    <span class="label">Time</span>
+    <span class="value" id="timerDisplay">0:00</span>
+  </div>
+</div>
+
+<div class="status-banner info" id="statusBanner">Flip two cards to find matching pairs.</div>
+
+<div class="grid-wrap">
+  <div class="grid" id="cardGrid"></div>
+</div>
+
+<div class="difficulty-row">
+  <span class="diff-label">Difficulty</span>
+  <button class="diff-btn active" onclick="setDifficulty('easy',this)">Easy</button>
+  <button class="diff-btn" onclick="setDifficulty('medium',this)">Medium</button>
+  <button class="diff-btn" onclick="setDifficulty('hard',this)">Hard</button>
+</div>
+
+<div class="btn-row">
+  <button class="btn btn-secondary" onclick="newGame()">New Game</button>
+  <button class="btn btn-primary" onclick="newGame()">Shuffle</button>
+</div>
+
+<!-- Win Modal -->
+<div class="modal-overlay" id="winModal">
+  <div class="modal">
+    <div class="trophy">🏆</div>
+    <h2>You Won!</h2>
+    <p class="subtitle" id="winSubtitle">Incredible memory!</p>
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-val" id="winMoves">0</div>
+        <div class="stat-lbl">Moves</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="winTime">0:00</div>
+        <div class="stat-lbl">Time</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="winAccuracy">0%</div>
+        <div class="stat-lbl">Accuracy</div>
+      </div>
+    </div>
+    <p class="result-msg" id="winMsg"></p>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="newGame();closeModal()">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<!-- SVG shape definitions — gradients at top level so Chrome resolves them -->
+<svg style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="g1" cx="35%" cy="30%"><stop offset="0%" stop-color="#ff9de2"/><stop offset="100%" stop-color="#c77dff"/></radialGradient>
+    <radialGradient id="g2" cx="35%" cy="30%"><stop offset="0%" stop-color="#4cc9f0"/><stop offset="100%" stop-color="#4361ee"/></radialGradient>
+    <radialGradient id="g3" cx="50%" cy="40%"><stop offset="0%" stop-color="#f9c74f"/><stop offset="100%" stop-color="#f3722c"/></radialGradient>
+    <radialGradient id="g4" cx="50%" cy="40%"><stop offset="0%" stop-color="#ffd166"/><stop offset="100%" stop-color="#ef476f"/></radialGradient>
+    <radialGradient id="g5" cx="50%" cy="40%"><stop offset="0%" stop-color="#ff9de2"/><stop offset="100%" stop-color="#ef476f"/></radialGradient>
+    <radialGradient id="g6" cx="35%" cy="30%"><stop offset="0%" stop-color="#80ffdb"/><stop offset="100%" stop-color="#06d6a0"/></radialGradient>
+    <symbol id="shape-1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="url(#g1)"/></symbol>
+    <symbol id="shape-2" viewBox="0 0 100 100"><rect x="15" y="15" width="70" height="70" rx="8" fill="url(#g2)"/></symbol>
+    <symbol id="shape-3" viewBox="0 0 100 100"><polygon points="50,12 92,88 8,88" fill="url(#g3)"/></symbol>
+    <symbol id="shape-4" viewBox="0 0 100 100"><polygon points="50,8 61,37 92,37 68,57 76,86 50,68 24,86 32,57 8,37 39,37" fill="url(#g4)"/></symbol>
+    <symbol id="shape-5" viewBox="0 0 100 100"><path d="M50,82 C50,82 12,55 12,33 C12,20 22,12 33,14 C41,15 50,26 50,26 C50,26 59,15 67,14 C78,12 88,20 88,33 C88,55 50,82 50,82Z" fill="url(#g5)"/></symbol>
+    <symbol id="shape-6" viewBox="0 0 100 100"><polygon points="50,10 88,50 50,90 12,50" fill="url(#g6)"/></symbol>
+  </defs>
+</svg>
+
+<script>
+// ── Difficulty config ──────────────────────────────────────────────────────
+// Easy   → cards stay flipped for 1.2s before flipping back (more time to see)
+// Medium → cards flip back after 0.9s (default)
+// Hard   → cards flip back after 0.5s (quick — must remember fast)
+const DIFFICULTIES = {
+  easy:   { flipDelay: 1200, label: 'Easy' },
+  medium: { flipDelay: 900,  label: 'Medium' },
+  hard:   { flipDelay: 500,  label: 'Hard' },
+};
+const SHAPE_NAMES  = ['','Circle','Square','Triangle','Star','Heart','Diamond'];
+
+// ── State ──────────────────────────────────────────────────────────────────
+let board = [], flipped = [], matched = [];
+let lockBoard = false, moves = 0, pairs = 0, seconds = 0;
+let timerInterval = null;
+let difficulty = 'medium';
+let bestTimes = { easy: null, medium: null, hard: null };   // seconds per mode
+let totalAttempts = 0; // for accuracy calculation
+
+// ── Difficulty ─────────────────────────────────────────────────────────────
+function setDifficulty(d, btn) {
+  difficulty = d;
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  newGame();
+}
+
+// ── Shuffle ────────────────────────────────────────────────────────────────
+function shuffle() {
+  let c = [1,1,2,2,3,3,4,4,5,5,6,6];
+  for (let i = c.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [c[i], c[j]] = [c[j], c[i]];
+  }
+  return c;
+}
+
+// ── New game ───────────────────────────────────────────────────────────────
+function newGame() {
+  clearInterval(timerInterval);
+  board = shuffle();
+  flipped = []; matched = [];
+  lockBoard = false; moves = 0; pairs = 0; seconds = 0;
+  totalAttempts = 0;
+  updateScores();
+  updateTimerDisplay();
+  renderGrid();
+  setStatus('Flip two cards to find matching pairs.', 'info');
+  timerInterval = setInterval(() => { seconds++; updateTimerDisplay(); }, 1000);
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderGrid() {
+  const g = document.getElementById('cardGrid');
+  g.innerHTML = '';
+  for (let i = 0; i < 12; i++) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.index = i;
+    card.innerHTML = `
+      <div class="card-inner">
+        <div class="card-back">
+          <div class="pattern">${Array(9).fill('<span></span>').join('')}</div>
+        </div>
+        <div class="card-front">
+          <svg class="shape-icon" width="52" height="52" viewBox="0 0 100 100">
+            <use href="#shape-${board[i]}"/>
+          </svg>
+        </div>
+      </div>`;
+    card.addEventListener('click', () => onCardClick(i));
+    g.appendChild(card);
+  }
+}
+
+function getCardEl(i) {
+  return document.querySelector(`.card[data-index="${i}"]`);
+}
+
+// ── Click handler ──────────────────────────────────────────────────────────
+function onCardClick(i) {
+  if (lockBoard) return;
+  if (matched.includes(i)) return;
+  if (flipped.includes(i)) return;
+  if (flipped.length >= 2) return;
+
+  getCardEl(i).classList.add('flipped');
+  flipped.push(i);
+
+  if (flipped.length === 2) {
+    lockBoard = true;
+    moves++;
+    totalAttempts++;
+    updateScores();
+    checkMatch(flipped[0], flipped[1]);
+  }
+}
+
+// ── Match logic ────────────────────────────────────────────────────────────
+function checkMatch(i1, i2) {
+  if (board[i1] === board[i2]) {
+    // Match
+    matched.push(i1, i2);
+    flipped = [];
+    pairs++;
+
+    getCardEl(i1).classList.add('matched', 'pop');
+    getCardEl(i2).classList.add('matched', 'pop');
+    setTimeout(() => {
+      getCardEl(i1)?.classList.remove('pop');
+      getCardEl(i2)?.classList.remove('pop');
+    }, 300);
+
+    updateScores();
+    setStatus(`${SHAPE_NAMES[board[i1]]} matched!`, 'success');
+    lockBoard = false;
+
+    if (pairs === 6) {
+      setTimeout(showWin, 500);
+    }
+  } else {
+    // Mismatch — hold cards visible for `flipDelay` ms then flip back
+    const delay = DIFFICULTIES[difficulty].flipDelay;
+    setStatus('No match — keep looking!', 'error');
+
+    setTimeout(() => {
+      getCardEl(i1)?.classList.add('shake');
+      getCardEl(i2)?.classList.add('shake');
+      setTimeout(() => {
+        getCardEl(i1)?.classList.remove('shake', 'flipped');
+        getCardEl(i2)?.classList.remove('shake', 'flipped');
+        flipped = [];
+        lockBoard = false;
+        setStatus('Flip two cards to find matching pairs.', 'info');
+      }, 350);
+    }, delay);
+  }
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+function updateScores() {
+  document.getElementById('pairsFound').textContent = `${pairs}/6`;
+  document.getElementById('moveCount').textContent  = moves;
+}
+
+function updateTimerDisplay() {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  document.getElementById('timerDisplay').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+function setStatus(msg, type = '') {
+  const el = document.getElementById('statusBanner');
+  el.textContent = msg;
+  el.className = 'status-banner ' + type;
+}
+
+// ── Win screen ─────────────────────────────────────────────────────────────
+function showWin() {
+  clearInterval(timerInterval);
+
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  const timeStr = `${m}:${s.toString().padStart(2,'0')}`;
+  const accuracy = Math.round((6 / totalAttempts) * 100); // 6 pairs out of N attempts
+
+  // Update best time for this difficulty
+  if (bestTimes[difficulty] === null || seconds < bestTimes[difficulty]) {
+    bestTimes[difficulty] = seconds;
+    updateBestDisplay();
+  }
+
+  // Populate modal
+  document.getElementById('winMoves').textContent    = moves;
+  document.getElementById('winTime').textContent     = timeStr;
+  document.getElementById('winAccuracy').textContent = accuracy + '%';
+
+  const subtitles = ['Incredible memory!','You crushed it!','Flawless!','Memory master!'];
+  document.getElementById('winSubtitle').textContent =
+    subtitles[Math.floor(Math.random() * subtitles.length)];
+
+  // Result summary
+  let perfMsg = '';
+  if (accuracy === 100)      perfMsg = '<strong>Perfect accuracy!</strong> Every flip was a match.';
+  else if (accuracy >= 75)   perfMsg = `<strong>${accuracy}% accuracy</strong> — sharp memory.`;
+  else if (accuracy >= 50)   perfMsg = `<strong>${accuracy}% accuracy</strong> — good effort.`;
+  else                       perfMsg = `<strong>${accuracy}% accuracy</strong> — keep practising!`;
+
+  const modeLabel = DIFFICULTIES[difficulty].label;
+  document.getElementById('winMsg').innerHTML =
+    `${perfMsg}<br>${modeLabel} mode · ${seconds}s`;
+
+  document.getElementById('winModal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('winModal').classList.remove('show');
+}
+
+function updateBestDisplay() {
+  const b = bestTimes[difficulty];
+  if (b === null) {
+    document.getElementById('bestTime').textContent = '—';
+    return;
+  }
+  const m = Math.floor(b / 60);
+  const s = b % 60;
+  document.getElementById('bestTime').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+newGame();
+</script>
+</body>
+</html>
